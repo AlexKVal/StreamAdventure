@@ -1,4 +1,4 @@
-var child_duplex = require('./11_duplexer_with.js');
+var child_duplex = require('./11_duplexer_without.js');
 var path = require('path');
 
 var words = [

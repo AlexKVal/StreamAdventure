@@ -1,36 +1,55 @@
 var child_process = require('child_process')
-  , stream = require('stream')
-  , inherits = require('util').inherits
+  , Duplex = require('stream').Duplex
 
-var Duplex = stream.Duplex
-var PassThrough = stream.PassThrough
+function DuplexThrough(options, writable, readable) {
 
-function DuplexThrough(options) {
-  if (!(this instanceof DuplexThrough))
-    return new DuplexThrough(options)
+  if (typeof readable === 'undefined') {
+    readable = writable
+    writable = options
+    options = null
+  }
+
+  options = options || {}
 
   Duplex.call(this, options)
 
-  this.inRStream  = new PassThrough()
-  this.outWStream = new PassThrough()
+  this._writable = writable
+  this._readable = readable
 
-  this._readHandlersAreSet = false
-}
-inherits(DuplexThrough, Duplex)
+  var self = this
 
-DuplexThrough.prototype._write = function (chunk, enc, next) {
-  this.inRStream.write(chunk, enc, next)
-}
+  readable.on('data', function (e) {
+    if (!self.push(e)) {
+      readable.pause()
+    }
+  })
 
-DuplexThrough.prototype._read = function (n) {
-  this.outWStream.read(n)
+  writable.once('finish', function () {
+    self.end()
+  })
+
+  this.once('finish', function () {
+    writable.end()
+  })
+
+  readable.once('end', function () {
+    return self.push(null)
+  })
 }
+DuplexThrough.prototype =
+  Object.create(Duplex.prototype, {constructor: {value: DuplexThrough}})
+
+DuplexThrough.prototype._write =
+  function (chunk, enc, next) {
+    this._writable.write(chunk, enc, next)
+  }
+
+DuplexThrough.prototype._read =
+  function (n) {
+    this._readable.resume()
+  }
 
 module.exports = function (cmd, args) {
   var child = child_process.spawn(cmd, args)
-
-  var duplex = new DuplexThrough()
-  child.stdout.pipe(duplex.inRStream)
-  duplex.outWStream.pipe(child.stdin)
-  return duplex
+  return new DuplexThrough(child.stdin, child.stdout)
 }
